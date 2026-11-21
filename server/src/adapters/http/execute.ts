@@ -2,6 +2,18 @@ import type { AdapterExecutionContext, AdapterExecutionResult } from "../types.j
 import { asString, asNumber, parseObject } from "../utils.js";
 import { guardedHttpAdapterFetch } from "./remote-fetch.js";
 
+const MAX_RESPONSE_BYTES = 16_000;
+const MAX_SUMMARY_CHARS = 1_200;
+
+function summarizeResponse(status: number, text: string, parsed: unknown): string {
+  const answer =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) && typeof (parsed as Record<string, unknown>).answer === "string"
+      ? (parsed as Record<string, unknown>).answer as string
+      : text;
+  const summary = answer.trim();
+  return summary ? summary.slice(0, MAX_SUMMARY_CHARS) : `HTTP response ${status}`;
+}
+
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
   const { config, runId, agent, context } = ctx;
   const url = asString(config.url, "");
@@ -24,9 +36,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const timer = timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   try {
-    // HTTP adapters have no child-process spawn event. Signal immediately
-    // before starting the remote request so dispatch gates can release without
-    // waiting for the endpoint to respond.
     ctx.onDispatch?.();
     const res = await guardedHttpAdapterFetch(url, {
       method,
@@ -42,11 +51,30 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       throw new Error(`HTTP invoke failed with status ${res.status}`);
     }
 
+    // Capture bounded JSON/text responses so webhook-backed agents can return
+    // actionable results to Paperclip instead of only reporting the request URL.
+    const responseText = (await res.text()).slice(0, MAX_RESPONSE_BYTES);
+    let parsed: unknown = null;
+    if (responseText) {
+      try {
+        parsed = JSON.parse(responseText);
+      } catch {
+        parsed = null;
+      }
+    }
+    const resultJson =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : responseText
+          ? { response: responseText }
+          : null;
+
     return {
       exitCode: 0,
       signal: null,
       timedOut: false,
-      summary: `HTTP ${method} ${url}`,
+      summary: summarizeResponse(res.status, responseText, parsed),
+      resultJson,
     };
   } catch (err) {
     if (timer && err instanceof Error && err.name === "AbortError") {
