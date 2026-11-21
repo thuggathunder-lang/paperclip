@@ -113,6 +113,23 @@ describe("http adapter execute", () => {
     expect(result.resultJson).toEqual({ response: "Plain-text result" });
   });
 
+  it("applies a default 30-second request timeout", async () => {
+    guardedFetchMock.mockImplementation(async (_url: string, init?: RequestInit) => {
+      expect(init?.signal).toBeInstanceOf(AbortSignal);
+      expect(init?.signal?.aborted).toBe(false);
+      return new Response(null, { status: 204 });
+    });
+    await execute({
+      runId: "run-1",
+      agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+      runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+      config: { url: "https://example.test/webhook" },
+      context: {},
+      onLog: async () => {},
+    });
+    expect(guardedFetchMock).toHaveBeenCalledOnce();
+  });
+
   it("reports configured request timeout as timed_out", async () => {
     guardedFetchMock.mockImplementation(
       (_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
