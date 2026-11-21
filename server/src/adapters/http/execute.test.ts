@@ -82,6 +82,37 @@ describe("http adapter execute", () => {
     expect(guardedFetchMock).toHaveBeenCalledOnce();
   });
 
+  it("returns JSON webhook response data and a concise answer summary", async () => {
+    guardedFetchMock.mockResolvedValue(new Response(JSON.stringify({ answer: "Task completed. Verified output.", status: "ok" }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    }));
+    const result = await execute({
+      runId: "run-1",
+      agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+      runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+      config: { url: "https://example.test/webhook" },
+      context: {},
+      onLog: async () => {},
+    });
+    expect(result.summary).toBe("Task completed. Verified output.");
+    expect(result.resultJson).toEqual({ answer: "Task completed. Verified output.", status: "ok" });
+  });
+
+  it("returns plain-text webhook response in the result payload", async () => {
+    guardedFetchMock.mockResolvedValue(new Response("Plain-text result", { status: 200 }));
+    const result = await execute({
+      runId: "run-1",
+      agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+      runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+      config: { url: "https://example.test/webhook" },
+      context: {},
+      onLog: async () => {},
+    });
+    expect(result.summary).toBe("Plain-text result");
+    expect(result.resultJson).toEqual({ response: "Plain-text result" });
+  });
+
   it("reports configured request timeout as timed_out", async () => {
     guardedFetchMock.mockImplementation(
       (_url: string, init?: RequestInit) => new Promise((_resolve, reject) => {
