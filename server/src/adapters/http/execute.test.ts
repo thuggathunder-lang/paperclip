@@ -201,6 +201,38 @@ describe("HTTP error response diagnostics", () => {
     })).rejects.toThrow("HTTP invoke failed with status 502: Gateway unavailable");
   });
 
+  it("redacts credentials and API keys from non-2xx diagnostics", async () => {
+    guardedFetchMock.mockResolvedValue(new Response(
+      "Authorization: Bearer abc123 api_key=key-secret password=hunter2",
+      { status: 500 },
+    ));
+    await expect(execute({
+      runId: "run-1",
+      agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+      runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+      config: { url: "https://example.test/webhook" },
+      context: {},
+      onLog: async () => {},
+    })).rejects.toMatchObject({
+      message: expect.stringContaining("[REDACTED]"),
+    });
+    try {
+      await execute({
+        runId: "run-1",
+        agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+        runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+        config: { url: "https://example.test/webhook" },
+        context: {},
+        onLog: async () => {},
+      });
+    } catch (err) {
+      const message = (err as Error).message;
+      expect(message).not.toContain("abc123");
+      expect(message).not.toContain("key-secret");
+      expect(message).not.toContain("hunter2");
+    }
+  });
+
   it("caps diagnostic text from oversized non-2xx response bodies", async () => {
     guardedFetchMock.mockResolvedValue(new Response("x".repeat(25_000), { status: 500 }));
     await expect(execute({
