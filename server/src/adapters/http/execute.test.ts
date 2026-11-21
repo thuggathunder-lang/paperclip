@@ -206,16 +206,7 @@ describe("HTTP error response diagnostics", () => {
       "Authorization: Bearer abc123 api_key=key-secret password=hunter2",
       { status: 500 },
     ));
-    await expect(execute({
-      runId: "run-1",
-      agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
-      runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
-      config: { url: "https://example.test/webhook" },
-      context: {},
-      onLog: async () => {},
-    })).rejects.toMatchObject({
-      message: expect.stringContaining("[REDACTED]"),
-    });
+    let message = "";
     try {
       await execute({
         runId: "run-1",
@@ -226,11 +217,12 @@ describe("HTTP error response diagnostics", () => {
         onLog: async () => {},
       });
     } catch (err) {
-      const message = (err as Error).message;
-      expect(message).not.toContain("abc123");
-      expect(message).not.toContain("key-secret");
-      expect(message).not.toContain("hunter2");
+      message = (err as Error).message;
     }
+    expect(message).toContain("[REDACTED]");
+    expect(message).not.toContain("abc123");
+    expect(message).not.toContain("key-secret");
+    expect(message).not.toContain("hunter2");
   });
 
   it("caps diagnostic text from oversized non-2xx response bodies", async () => {
