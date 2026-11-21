@@ -225,6 +225,29 @@ describe("HTTP error response diagnostics", () => {
     expect(message).not.toContain("hunter2");
   });
 
+  it("redacts quoted JSON secret keys from non-2xx diagnostics", async () => {
+    guardedFetchMock.mockResolvedValue(new Response(
+      JSON.stringify({ api_key: "json-key-secret", password: "json-password" }),
+      { status: 500 },
+    ));
+    let message = "";
+    try {
+      await execute({
+        runId: "run-1",
+        agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+        runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+        config: { url: "https://example.test/webhook" },
+        context: {},
+        onLog: async () => {},
+      });
+    } catch (err) {
+      message = (err as Error).message;
+    }
+    expect(message).toContain("[REDACTED]");
+    expect(message).not.toContain("json-key-secret");
+    expect(message).not.toContain("json-password");
+  });
+
   it("caps diagnostic text from oversized non-2xx response bodies", async () => {
     guardedFetchMock.mockResolvedValue(new Response("x".repeat(25_000), { status: 500 }));
     await expect(execute({

@@ -8,7 +8,7 @@ function redactDiagnosticSecrets(text: string): string {
   return text
     .replace(/(authorization\s*[:=]\s*)(?:bearer\s+)?[^\s,;]+/gi, "$1[REDACTED]")
     .replace(/(bearer\s+)[^\s,;]+/gi, "$1[REDACTED]")
-    .replace(/((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)\s*[:=]\s*)[\"']?[^\s,;}\"']+[\"']?/gi, "$1[REDACTED]");
+    .replace(/((?:["']?)(?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)(?:["']?)\s*[:=]\s*["']?)[^\s,;}{"']+["']?/gi, "$1[REDACTED]");
 }
 
 function safeEndpointLabel(rawUrl: string): string {
