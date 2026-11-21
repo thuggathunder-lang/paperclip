@@ -167,3 +167,30 @@ describe("bounded HTTP response", () => {
     expect(result.summary).toContain("response truncated");
   });
 });
+
+
+describe("HTTP error response diagnostics", () => {
+  it("includes a bounded response body in non-2xx errors", async () => {
+    guardedFetchMock.mockResolvedValue(new Response("Gateway unavailable", { status: 502 }));
+    await expect(execute({
+      runId: "run-1",
+      agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+      runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+      config: { url: "https://example.test/webhook" },
+      context: {},
+      onLog: async () => {},
+    })).rejects.toThrow("HTTP invoke failed with status 502: Gateway unavailable");
+  });
+
+  it("caps diagnostic text from oversized non-2xx response bodies", async () => {
+    guardedFetchMock.mockResolvedValue(new Response("x".repeat(25_000), { status: 500 }));
+    await expect(execute({
+      runId: "run-1",
+      agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+      runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+      config: { url: "https://example.test/webhook" },
+      context: {},
+      onLog: async () => {},
+    })).rejects.toThrow("HTTP invoke failed with status 500: " + "x".repeat(500) + " (error body truncated)");
+  });
+});
