@@ -5,13 +5,51 @@ import { guardedHttpAdapterFetch } from "./remote-fetch.js";
 const MAX_RESPONSE_BYTES = 16_000;
 const MAX_SUMMARY_CHARS = 1_200;
 
-function summarizeResponse(status: number, text: string, parsed: unknown): string {
+async function readBoundedResponse(res: Response): Promise<{ text: string; truncated: boolean }> {
+  if (!res.body) return { text: "", truncated: false };
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  let truncated = false;
+  try {
+    while (total < MAX_RESPONSE_BYTES) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      const remaining = MAX_RESPONSE_BYTES - total;
+      if (value.byteLength > remaining) {
+        chunks.push(value.subarray(0, remaining));
+        total += remaining;
+        truncated = true;
+        break;
+      }
+      chunks.push(value);
+      total += value.byteLength;
+    }
+    if (!truncated && total === MAX_RESPONSE_BYTES) {
+      const { done, value } = await reader.read();
+      if (!done && value?.byteLength) truncated = true;
+    }
+  } finally {
+    if (truncated) await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { text: new TextDecoder().decode(merged), truncated };
+}
+
+function summarizeResponse(status: number, text: string, parsed: unknown, truncated: boolean): string {
   const answer =
     parsed && typeof parsed === "object" && !Array.isArray(parsed) && typeof (parsed as Record<string, unknown>).answer === "string"
       ? (parsed as Record<string, unknown>).answer as string
       : text;
   const summary = answer.trim();
-  return summary ? summary.slice(0, MAX_SUMMARY_CHARS) : `HTTP response ${status}`;
+  const suffix = truncated ? " (response truncated)" : "";
+  return (summary ? summary.slice(0, MAX_SUMMARY_CHARS) : `HTTP response ${status}`) + suffix;
 }
 
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
@@ -51,11 +89,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       throw new Error(`HTTP invoke failed with status ${res.status}`);
     }
 
-    // Capture bounded JSON/text responses so webhook-backed agents can return
-    // actionable results to Paperclip instead of only reporting the request URL.
-    const responseText = (await res.text()).slice(0, MAX_RESPONSE_BYTES);
+    const { text: responseText, truncated } = await readBoundedResponse(res);
     let parsed: unknown = null;
-    if (responseText) {
+    if (responseText && !truncated) {
       try {
         parsed = JSON.parse(responseText);
       } catch {
@@ -66,14 +102,16 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       parsed && typeof parsed === "object" && !Array.isArray(parsed)
         ? parsed as Record<string, unknown>
         : responseText
-          ? { response: responseText }
-          : null;
+          ? { response: responseText, ...(truncated ? { responseTruncated: true } : {}) }
+          : truncated
+            ? { responseTruncated: true }
+            : null;
 
     return {
       exitCode: 0,
       signal: null,
       timedOut: false,
-      summary: summarizeResponse(res.status, responseText, parsed),
+      summary: summarizeResponse(res.status, responseText, parsed, truncated),
       resultJson,
     };
   } catch (err) {
