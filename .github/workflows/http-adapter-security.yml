@@ -1,6 +1,14 @@
 name: HTTP adapter security regressions
 
 on:
+  push:
+    branches:
+      - master
+    paths:
+      - "server/src/adapters/http/**"
+      - "server/src/services/remote-http-**"
+      - "server/src/__tests__/remote-http-*.test.ts"
+      - ".github/workflows/http-adapter-security.yml"
   pull_request:
     paths:
       - "server/src/adapters/http/**"
