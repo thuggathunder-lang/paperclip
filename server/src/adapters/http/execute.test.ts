@@ -155,7 +155,7 @@ describe("http adapter execute", () => {
         taskKey: null,
       },
       config: {
-        url: "https://example.test/webhook",
+        url: "https://example.test/webhook?token=secret-value",
         timeoutMs: 1,
       },
       context: {},
@@ -165,6 +165,8 @@ describe("http adapter execute", () => {
     expect(result.timedOut).toBe(true);
     expect(result.errorCode).toBe("timeout");
     expect(result.errorMessage).toContain("timed out after 1ms");
+    expect(result.errorMessage).toContain("https://example.test");
+    expect(result.errorMessage).not.toContain("secret-value");
   });
 });
 
