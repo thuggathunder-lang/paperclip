@@ -2,6 +2,7 @@ import type { AdapterExecutionContext, AdapterExecutionResult } from "../types.j
 import { asString, asNumber, parseObject } from "../utils.js";
 import { guardedHttpAdapterFetch } from "./remote-fetch.js";
 
+const DEFAULT_TIMEOUT_MS = 30_000;
 const MAX_RESPONSE_BYTES = 16_000;
 const MAX_SUMMARY_CHARS = 1_200;
 
@@ -58,7 +59,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (!url) throw new Error("HTTP adapter missing url");
 
   const method = asString(config.method, "POST");
-  const timeoutMs = asNumber(config.timeoutMs, 0);
+  const timeoutMs = asNumber(config.timeoutMs, DEFAULT_TIMEOUT_MS);
   const headers = parseObject(config.headers) as Record<string, string>;
   const payloadTemplate = parseObject(config.payloadTemplate);
   const body = {
