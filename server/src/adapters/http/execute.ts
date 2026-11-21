@@ -3,6 +3,15 @@ import { asString, asNumber, parseObject } from "../utils.js";
 import { guardedHttpAdapterFetch } from "./remote-fetch.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
+
+function safeEndpointLabel(rawUrl: string): string {
+  try {
+    const url = new URL(rawUrl);
+    return url.origin;
+  } catch {
+    return "configured endpoint";
+  }
+}
 const MAX_RESPONSE_BYTES = 16_000;
 const MAX_SUMMARY_CHARS = 1_200;
 
@@ -128,7 +137,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         exitCode: null,
         signal: null,
         timedOut: true,
-        errorMessage: `HTTP ${method} ${url} timed out after ${timeoutMs}ms`,
+        errorMessage: `HTTP ${method} ${safeEndpointLabel(url)} timed out after ${timeoutMs}ms`,
         errorCode: "timeout",
       };
     }
