@@ -86,7 +86,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     });
 
     if (!res.ok) {
-      throw new Error(`HTTP invoke failed with status ${res.status}`);
+      const { text: errorBody, truncated } = await readBoundedResponse(res);
+      const diagnostic = errorBody.trim().slice(0, 500);
+      const suffix = truncated || errorBody.length > 500 ? " (error body truncated)" : "";
+      throw new Error(
+        diagnostic
+          ? `HTTP invoke failed with status ${res.status}: ${diagnostic}${suffix}`
+          : `HTTP invoke failed with status ${res.status}`,
+      );
     }
 
     const { text: responseText, truncated } = await readBoundedResponse(res);
