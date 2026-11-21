@@ -150,3 +150,20 @@ describe("http adapter execute", () => {
     expect(result.errorMessage).toContain("timed out after 1ms");
   });
 });
+
+
+describe("bounded HTTP response", () => {
+  it("limits oversized response bodies and flags truncation", async () => {
+    guardedFetchMock.mockResolvedValue(new Response("x".repeat(25_000), { status: 200 }));
+    const result = await execute({
+      runId: "run-1",
+      agent: { id: "agent-1", companyId: "company-1", name: "Agent", adapterType: "http", adapterConfig: {} },
+      runtime: { sessionId: null, sessionParams: null, sessionDisplayId: null, taskKey: null },
+      config: { url: "https://example.test/webhook" },
+      context: {},
+      onLog: async () => {},
+    });
+    expect(result.resultJson).toEqual({ response: "x".repeat(16_000), responseTruncated: true });
+    expect(result.summary).toContain("response truncated");
+  });
+});
