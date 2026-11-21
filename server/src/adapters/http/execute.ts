@@ -4,6 +4,13 @@ import { guardedHttpAdapterFetch } from "./remote-fetch.js";
 
 const DEFAULT_TIMEOUT_MS = 30_000;
 
+function redactDiagnosticSecrets(text: string): string {
+  return text
+    .replace(/(authorization\\s*[:=]\\s*)(?:bearer\\s+)?[^\\s,;]+/gi, "$1[REDACTED]")
+    .replace(/(bearer\\s+)[^\\s,;]+/gi, "$1[REDACTED]")
+    .replace(/((?:api[_-]?key|access[_-]?token|refresh[_-]?token|password|passwd|secret|credential)\\s*[:=]\\s*)["']?[^\\s,;}"']+["']?/gi, "$1[REDACTED]");
+}
+
 function safeEndpointLabel(rawUrl: string): string {
   try {
     const url = new URL(rawUrl);
@@ -97,7 +104,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
     if (!res.ok) {
       const { text: errorBody, truncated } = await readBoundedResponse(res);
-      const diagnostic = errorBody.trim().slice(0, 500);
+      const diagnostic = redactDiagnosticSecrets(errorBody.trim()).slice(0, 500);
       const suffix = truncated || errorBody.length > 500 ? " (error body truncated)" : "";
       throw new Error(
         diagnostic
